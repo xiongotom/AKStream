@@ -234,6 +234,31 @@ namespace AKStreamWeb.Controllers
         }
 
         /// <summary>
+        /// 通过视频流的URL临时添加一个需要转发的视频流，只支持RTSP和RTMP
+        /// </summary>
+        /// <param name="AccessKey"></param>
+        /// <param name="vedioUrl"></param>
+        /// <param name="mainId"></param>
+        /// <param name="isTcp"></param>
+        /// <returns></returns>
+        /// <exception cref="AkStreamException"></exception>
+        [AuthVerify]
+        [Route("AddStreamProxyTemp")]
+        [HttpGet]
+        public MediaServerStreamInfo AddStreamProxyTemp([FromHeader(Name = "AccessKey")] string AccessKey,
+            string vedioUrl, string mainId, int isTcp=0)
+        {
+            ResponseStruct rs;
+            var ret = MediaServerService.AddStreamProxyTemp(vedioUrl, mainId, out rs, isTcp==0);
+            if (rs.Code != ErrorNumber.None)
+            {
+                throw new AkStreamException(rs);
+            }
+
+            return ret;
+        }
+
+        /// <summary>
         /// 停止录制文件
         /// </summary>
         /// <param name="AccessKey"></param>

@@ -11,7 +11,6 @@ using LibCommon.Structs.WebRequest;
 using LibCommon.Structs.WebRequest.AKStreamKeeper;
 using LibCommon.Structs.WebResponse;
 using LibCommon.Structs.WebResponse.AKStreamKeeper;
-using LibLogger;
 using LibZLMediaKitMediaServer;
 using LibZLMediaKitMediaServer.Structs.WebHookRequest;
 using LibZLMediaKitMediaServer.Structs.WebRequest.ZLMediaKit;
@@ -1960,6 +1959,128 @@ namespace AKStreamWeb.Services
             return videoChannelMediaInfo.MediaServerStreamInfo;
         }
 
+
+        /// <summary>
+        /// 临时添加一个需要转发的视频流，只支持RTSP和RTMP
+        /// </summary>
+        /// <param name="mediaUrl">视频url</param>
+        /// <param name="mainId">视频编号，相同监控的用同一个编号，避免重复</param>
+        /// <param name="rs"></param>
+        /// <param name="isTcp"></param>
+        /// <returns></returns>
+        public static MediaServerStreamInfo AddStreamProxyTemp(string mediaUrl, string mainId, out ResponseStruct rs, bool isTcp=false)
+        {
+            rs = new ResponseStruct()
+            {
+                Code = ErrorNumber.None,
+                Message = ErrorMessage.ErrorDic![ErrorNumber.None],
+            };
+            if(Common.MediaServerList.Count <= 0)
+            {
+                GCommon.Logger.Warn($"[{Common.LoggerHead}]->未找到多媒体服务");
+                return null;
+            }
+            var mediaServer = Common.MediaServerList.FirstOrDefault();
+            
+            if (string.IsNullOrEmpty(mediaUrl))
+            {
+                rs = new ResponseStruct()
+                {
+                    Code = ErrorNumber.MediaServer_VideoSrcExcept,
+                    Message = ErrorMessage.ErrorDic![ErrorNumber.MediaServer_VideoSrcExcept],
+                };
+                GCommon.Logger.Warn(
+                   $"[{Common.LoggerHead}]->请求临时代理视频流失败，URL为空->{mediaUrl}->{mainId}->{JsonHelper.ToJson(rs, Formatting.Indented)}");
+
+                return null;
+            }
+            if (!UtilsHelper.IsUrl(mediaUrl) && !UtilsHelper.IsRtmpUrl(mediaUrl) &&
+                !UtilsHelper.IsRtspUrl(mediaUrl))
+            {
+                rs = new ResponseStruct()
+                {
+                    Code = ErrorNumber.MediaServer_VideoSrcExcept,
+                    Message = ErrorMessage.ErrorDic![ErrorNumber.MediaServer_VideoSrcExcept],
+                };
+                GCommon.Logger.Warn(
+                   $"[{Common.LoggerHead}]->请求临时代理视频流失败->{mediaUrl}->{mainId}->{JsonHelper.ToJson(rs, Formatting.Indented)}");
+
+                return null;
+            }
+
+            var app = "temp";
+            var vhost = "__defaultHost";
+            var streamType = DeviceStreamType.Rtsp;
+            if(UtilsHelper.IsRtmpUrl(mediaUrl))
+            {
+                streamType = DeviceStreamType.Rtmp;
+            } else if(UtilsHelper.IsUrl(mediaUrl))
+            {
+                streamType = DeviceStreamType.Http;
+            }
+            
+            VideoChannel vedioChannel = null;
+            var dbobj = ORMHelper.Db.Select<VideoChannel>().Where(x => x.MainId.Equals(mainId)).First();
+            if (dbobj != null)
+            {
+                // 已经存在，则修改
+                var modReq = new ReqModifyVideoChannel()
+                {
+                    VideoSrcUrl = mediaUrl,
+                    MediaServerId = dbobj.MediaServerId,
+                    Enabled = true,
+                    ChannelId = dbobj.ChannelId,
+                    DeviceNetworkType = dbobj.DeviceNetworkType,
+                    DeviceStreamType = dbobj.DeviceStreamType,
+                    MethodByGetStream = dbobj.MethodByGetStream,
+                    DeviceId = dbobj.DeviceId,
+                };
+                vedioChannel = ModifyVideoChannel(mainId, modReq, out rs);
+            }
+            else
+            {
+                // 如果不存在，则新增
+                var addReq = new ReqAddVideoChannel()
+                {
+                    Enabled = true,
+                    AutoRecord = false,
+                    RecordPlanName = null,
+                    AutoVideo = false,
+                    ChannelId = null,
+                    RecordSecs = 0,
+                    ChannelName = mainId,
+                    App = app,
+                    Vhost = vhost,
+                    DeviceId = null,
+                    DefaultRtpPort = true,
+                    DeviceNetworkType = DeviceNetworkType.Fixed,
+                    DeviceStreamType = streamType,
+                    IpV4Address = "11.11.11.11",
+                    IpV6Address = "",
+                    MediaServerId = mediaServer.MediaServerId,
+                    NoPlayerBreak = true,
+                    RtpWithTcp = isTcp,
+                    VideoDeviceType = VideoDeviceType.UNKNOW,
+                    VideoSrcUrl = mediaUrl,
+                    MethodByGetStream = MethodByGetStream.SelfMethod
+                };
+                vedioChannel = AddVideoChannel(addReq,out rs, mainId);
+            }
+            if(!rs.Code.Equals(ErrorNumber.None))
+            {
+                return null;
+            }
+            var retobj = GCommon.Ldb.VideoOnlineInfo.FindOne(x => x.MainId.Equals(mainId)
+                                                                  && x.MediaServerId.Equals(mediaServer.MediaServerId));
+            if(retobj != null)
+            {
+                return retobj.MediaServerStreamInfo;
+            }
+            var streamInfo = AddStreamProxy(mediaServer.MediaServerId, mainId, out rs, vedioChannel);
+
+            return streamInfo;
+        }
+
         public static ResZLMediaKitStopRecord StopRecord(string mediaServerId, string mainId, out ResponseStruct rs)
         {
             rs = new ResponseStruct()
@@ -2645,8 +2766,9 @@ namespace AKStreamWeb.Services
         /// </summary>
         /// <param name="req"></param>
         /// <param name="rs"></param>
+        /// <param name="mainId">指定的mainId，如果不指定会根据自动生成一个</param>
         /// <returns></returns>
-        public static VideoChannel AddVideoChannel(ReqAddVideoChannel req, out ResponseStruct rs)
+        public static VideoChannel AddVideoChannel(ReqAddVideoChannel req, out ResponseStruct rs, string mainId="")
         {
             rs = new ResponseStruct()
             {
@@ -2767,13 +2889,13 @@ namespace AKStreamWeb.Services
                 return null;
             }
 
-            string mainId = "";
-            if (req.DeviceStreamType == DeviceStreamType.GB28181)
+            //string mainId = "";
+            if (string.IsNullOrEmpty(mainId) && req.DeviceStreamType == DeviceStreamType.GB28181)
             {
                 var ret = UtilsHelper.GetSSRCInfo(req.DeviceId, req.ChannelId);
                 mainId = ret.Value;
             }
-            else
+            else if(string.IsNullOrEmpty(mainId))
             {
                 mainId = UtilsHelper.GetDisGB28181VideoChannelMainId(req.VideoSrcUrl);
             }
@@ -3294,7 +3416,8 @@ namespace AKStreamWeb.Services
                 {
                     if (order != null)
                     {
-                        orderBy += UtilsHelper.AddQuote(order.FieldName) + " " + Enum.GetName(typeof(OrderByDir), order.OrderByDir!) + ",";
+                        //orderBy += UtilsHelper.AddQuote(order.FieldName) + " " + Enum.GetName(typeof(OrderByDir), order.OrderByDir!) + ",";
+                        orderBy += order.FieldName + " " + Enum.GetName(typeof(OrderByDir), order.OrderByDir!) + ",";
                     }
                 }
 
@@ -3391,7 +3514,7 @@ namespace AKStreamWeb.Services
                             x => x.ChannelId.Contains(req.ChannelIdLike))
                         .WhereIf(req.IncludeSubDeptartment != null && req.IncludeSubDeptartment == true,
                             x => x.PDepartmentId.Equals(req.DepartmentId))
-                        .OrderBy(orderBy)
+                        //.OrderBy(orderBy)
                         .Count(out total)
                         .Page((int) req.PageIndex!, (int) req.PageSize!)
                         .ToList();

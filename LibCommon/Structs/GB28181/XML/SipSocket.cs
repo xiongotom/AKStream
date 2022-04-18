@@ -34,6 +34,7 @@ namespace LibCommon.Structs.GB28181.XML
             settings.NewLineChars = "\r\n";
             //settings.Encoding = Encoding.GetEncoding("GB2312");
             //settings.Encoding = new UTF8Encoding(false);
+            settings.Encoding = Encoding.UTF8;
             //settings.NewLineOnAttributes = true;
             //settings.OmitXmlDeclaration = false;
             using (XmlWriter writer = XmlWriter.Create(stream, settings))
