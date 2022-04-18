@@ -13,6 +13,7 @@ using LibLogger;
 using LibSystemInfo;
 using LibZLMediaKitMediaServer;
 using Newtonsoft.Json;
+using SIPSorcery.SIP;
 using JsonHelper = LibCommon.JsonHelper;
 
 namespace AKStreamWeb
@@ -181,7 +182,11 @@ namespace AKStreamWeb
                     $"[{LoggerHead}]->数据库连接异常,系统无法运行->\r\n{JsonHelper.ToJson(rsa, Formatting.Indented)}\r\n系统支持以下数据库连接,请根据下表正确设置dBType字段->\r\n{supportDataBaseList}");
                 Environment.Exit(0); //退出程序
             }
-
+            // 增加编码配置
+            if(AkStreamWebConfig.BodyEncoding.ToLower() == "gb2312")
+            {
+                SIPConstants.DEFAULT_ENCODING = System.Text.Encoding.GetEncoding("GB2312");
+            }
 
             string outPath = "";
             if (!string.IsNullOrEmpty(GCommon.OutConfigPath))

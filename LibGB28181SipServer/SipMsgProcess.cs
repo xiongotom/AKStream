@@ -328,6 +328,9 @@ namespace LibGB28181SipServer
             SIPEndPoint remoteEndPoint,
             SIPRequest sipRequest)
         {
+            //GCommon.Logger.Debug("-------------------parse debug-----------------------");
+            //GCommon.Logger.Debug(sipRequest.Body);
+            //GCommon.Logger.Debug("-------------------parse debug over-----------------------");
             XElement bodyXml = XElement.Parse(sipRequest.Body);
             string cmdType = bodyXml.Element("CmdType")?.Value.ToUpper()!;
             if (!string.IsNullOrEmpty(cmdType))

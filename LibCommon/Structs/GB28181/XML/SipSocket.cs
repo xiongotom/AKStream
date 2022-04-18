@@ -34,7 +34,7 @@ namespace LibCommon.Structs.GB28181.XML
             settings.NewLineChars = "\r\n";
             //settings.Encoding = Encoding.GetEncoding("GB2312");
             //settings.Encoding = new UTF8Encoding(false);
-            settings.Encoding = Encoding.UTF8;
+            //settings.Encoding = Encoding.UTF8;
             //settings.NewLineOnAttributes = true;
             //settings.OmitXmlDeclaration = false;
             using (XmlWriter writer = XmlWriter.Create(stream, settings))
@@ -47,6 +47,7 @@ namespace LibCommon.Structs.GB28181.XML
             }
 
             return Encoding.UTF8.GetString(stream.ToArray()).Replace("\r", "");
+            //return Encoding.GetEncoding("GB2312").GetString(stream.ToArray()).Replace("\r","");
         }
 
         public class MonitorLoopbackPort

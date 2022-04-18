@@ -17,6 +17,7 @@ namespace AKStreamWeb.Misc
         private bool _enableGB28181Client = false;
         private bool? _enableGB28181Server = false;
         private string? _ZlmFlvPrefix = "live";
+        private string? _bodyEncoding = "utf-8";
         
 
         /// <summary>
@@ -127,6 +128,15 @@ namespace AKStreamWeb.Misc
         {
             get => _ZlmFlvPrefix;
             set => _ZlmFlvPrefix = value;
+        }
+
+        /// <summary>
+        /// 解析sip消息内容的编码，utf-8 or gb2312
+        /// </summary>
+        public string BodyEncoding
+        {
+            get => _bodyEncoding;
+            set => _bodyEncoding = value;
         }
     }
 }
